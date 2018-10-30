@@ -9,10 +9,11 @@ module RailsSemanticLogger
       end
 
       def process_action(event)
+        query_count = ::RailsSemanticLogger::ActiveRecord::LogSubscriber.reset_count
         controller_logger(event).info do
           payload = event.payload.dup
 
-          payload[:db_query_count] = ::RailsSemanticLogger::ActiveRecord::QueryCountRegistry.sql_query_count
+          payload[:db_query_count] = query_count
 
           # Unused, but needed for Devise 401 status code monkey patch to still work.
           ::ActionController::Base.log_process_action(payload)

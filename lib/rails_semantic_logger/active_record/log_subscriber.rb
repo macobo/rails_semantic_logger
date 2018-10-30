@@ -1,16 +1,5 @@
 module RailsSemanticLogger
   module ActiveRecord
-    class QueryCountRegistry
-      extend ActiveSupport::PerThreadRegistry
-
-      attr_accessor :sql_query_count
-
-      [:sql_query_count].each do |val|
-        class_eval %{ def self.#{val}; instance.#{val}; end }, __FILE__, __LINE__
-        class_eval %{ def self.#{val}=(x); instance.#{val}=x; end }, __FILE__, __LINE__
-      end
-    end
-
     class LogSubscriber < ActiveSupport::LogSubscriber
       IGNORE_PAYLOAD_NAMES = %w[SCHEMA EXPLAIN].freeze
 
@@ -26,22 +15,35 @@ module RailsSemanticLogger
         ::ActiveRecord::RuntimeRegistry.sql_runtime ||= 0
       end
 
+      def self.count=(value)
+        Thread.current['sql_query_count'] = value
+      end
+
+      def self.count
+        Thread.current['sql_query_count'] ||= 0
+      end
+
       def self.reset_runtime
         rt           = runtime
         self.runtime = 0
-        QueryCountRegistry.sql_query_count = 0
         rt
+      end
+
+      def self.reset_count
+        previous = count
+        self.count = 0
+        previous
       end
 
       def sql(event)
         self.class.runtime += event.duration
-        QueryCountRegistry.sql_query_count ||= 0
-        QueryCountRegistry.sql_query_count += 1
-        return unless logger.debug?
 
         payload = event.payload
         name    = payload[:name]
         return if IGNORE_PAYLOAD_NAMES.include?(name)
+
+        self.class.count += 1
+        return unless logger.debug?
 
         log_payload         = {sql: payload[:sql]}
         log_payload[:binds] = bind_values(payload) unless (payload[:binds] || []).empty?
